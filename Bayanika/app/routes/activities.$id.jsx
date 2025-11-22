@@ -1,6 +1,7 @@
 import { json, redirect } from "@remix-run/node";
 import { useLoaderData, Link, Form, useActionData, useNavigation } from "@remix-run/react";
 import { createCookieSessionStorage } from "@remix-run/node";
+import mongoose from "mongoose";
 import Activity from "../models/activityModel.js";
 import User from "../models/userModel.js";
 import ProofOfWork from "../models/proofOfWorkModel.js";
@@ -39,7 +40,12 @@ export const loader = async ({ params, request }) => {
   const hasJoined = activity.participants?.some(p => p.userId.toString() === userId);
   const proofOfWork = await ProofOfWork.findOne({ userId, activityId: params.id });
 
-  return json({ user, activity, hasJoined, proofOfWork });
+  // Check if user just joined or submitted proof (from redirect)
+  const url = new URL(request.url);
+  const justJoined = url.searchParams.get("joined") === "true";
+  const proofSubmitted = url.searchParams.get("proofSubmitted") === "true";
+
+  return json({ user, activity, hasJoined, proofOfWork, justJoined, proofSubmitted });
 };
 
 export const action = async ({ params, request }) => {
@@ -56,67 +62,89 @@ export const action = async ({ params, request }) => {
   const actionType = formData.get("actionType");
 
   if (actionType === "join") {
-    const activity = await Activity.findById(params.id);
-    
-    if (!activity) {
-      return json({ error: "Activity not found" }, { status: 404 });
+    try {
+      const activity = await Activity.findById(params.id);
+      
+      if (!activity) {
+        return json({ error: "Activity not found" }, { status: 404 });
+      }
+
+      const hasJoined = activity.participants?.some(p => p.userId.toString() === userId);
+      
+      if (hasJoined) {
+        return json({ error: "You have already joined this activity" }, { status: 400 });
+      }
+
+      if (activity.participants?.length >= activity.maxParticipants) {
+        return json({ error: "Activity is full" }, { status: 400 });
+      }
+
+      // Initialize participants array if it doesn't exist
+      if (!activity.participants) {
+        activity.participants = [];
+      }
+
+      activity.participants.push({
+        userId: new mongoose.Types.ObjectId(userId),
+        joinedAt: new Date(),
+        isPresent: null,
+      });
+
+      await activity.save();
+      
+      console.log(`✅ User ${userId} successfully joined activity ${params.id}`);
+      console.log(`Total participants: ${activity.participants.length}`);
+
+      // Redirect to the same page to reload data and show updated state
+      return redirect(`/activities/${params.id}?joined=true`);
+    } catch (error) {
+      console.error("Error joining activity:", error);
+      return json({ error: error.message || "Failed to join activity" }, { status: 500 });
     }
-
-    const hasJoined = activity.participants?.some(p => p.userId.toString() === userId);
-    
-    if (hasJoined) {
-      return json({ error: "You have already joined this activity" }, { status: 400 });
-    }
-
-    if (activity.participants?.length >= activity.maxParticipants) {
-      return json({ error: "Activity is full" }, { status: 400 });
-    }
-
-    activity.participants.push({
-      userId,
-      joinedAt: new Date(),
-      isPresent: null,
-    });
-
-    await activity.save();
-
-    return json({ success: true, message: "Successfully joined the activity!" });
   }
 
   if (actionType === "submitProof") {
-    const description = formData.get("description");
-    const proofUrl = formData.get("proofUrl");
+    try {
+      const description = formData.get("description");
+      const proofUrl = formData.get("proofUrl");
 
-    const activity = await Activity.findById(params.id);
-    const hasJoined = activity.participants?.some(p => p.userId.toString() === userId);
+      const activity = await Activity.findById(params.id);
+      const hasJoined = activity.participants?.some(p => p.userId.toString() === userId);
 
-    if (!hasJoined) {
-      return json({ error: "You must join the activity first" }, { status: 400 });
+      if (!hasJoined) {
+        return json({ error: "You must join the activity first" }, { status: 400 });
+      }
+
+      // Check if proof already exists
+      const existingProof = await ProofOfWork.findOne({ userId, activityId: params.id });
+      
+      if (existingProof) {
+        return json({ error: "You have already submitted proof for this activity" }, { status: 400 });
+      }
+
+      await ProofOfWork.create({
+        userId,
+        activityId: params.id,
+        description,
+        proofUrl,
+        verified: false,
+      });
+
+      console.log(`✅ User ${userId} submitted proof for activity ${params.id}`);
+
+      // Redirect to reload data and show updated state
+      return redirect(`/activities/${params.id}?proofSubmitted=true`);
+    } catch (error) {
+      console.error("Error submitting proof:", error);
+      return json({ error: error.message || "Failed to submit proof" }, { status: 500 });
     }
-
-    // Check if proof already exists
-    const existingProof = await ProofOfWork.findOne({ userId, activityId: params.id });
-    
-    if (existingProof) {
-      return json({ error: "You have already submitted proof for this activity" }, { status: 400 });
-    }
-
-    await ProofOfWork.create({
-      userId,
-      activityId: params.id,
-      description,
-      proofUrl,
-      verified: false,
-    });
-
-    return json({ success: true, message: "Proof of work submitted! Awaiting verification." });
   }
 
   return json({ error: "Invalid action" }, { status: 400 });
 };
 
 export default function ActivityDetail() {
-  const { user, activity, hasJoined, proofOfWork } = useLoaderData();
+  const { user, activity, hasJoined, proofOfWork, justJoined, proofSubmitted } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
@@ -136,9 +164,13 @@ export default function ActivityDetail() {
           Back to Activities
         </Link>
 
-        {actionData?.success && (
+        {(actionData?.success || justJoined || proofSubmitted) && (
           <div className="bg-green-50 border border-green-200 text-green-700 px-6 py-4 rounded-lg mb-6 shadow-md">
-            ✅ {actionData.message}
+            ✅ {
+              actionData?.message || 
+              (justJoined && "Successfully joined the activity! You can now submit your proof of work below.") ||
+              (proofSubmitted && "Proof of work submitted! Awaiting verification.")
+            }
           </div>
         )}
 
