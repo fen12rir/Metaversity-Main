@@ -21,31 +21,52 @@ const sessionStorage = createCookieSessionStorage({
 });
 
 export const loader = async ({ params, request }) => {
-  await connectDb();
-  
-  const session = await sessionStorage.getSession(request.headers.get("Cookie"));
-  const userId = session.get("userId");
+  try {
+    await connectDb();
+    
+    const session = await sessionStorage.getSession(request.headers.get("Cookie"));
+    const userId = session.get("userId");
 
-  if (!userId) {
-    return redirect("/login");
+    if (!userId) {
+      return redirect("/login");
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      console.error(`User not found: ${userId}`);
+      return redirect("/login");
+    }
+
+    const activity = await Activity.findById(params.id);
+    
+    if (!activity) {
+      console.error(`Activity not found: ${params.id}`);
+      throw new Response("Activity not found", { status: 404 });
+    }
+
+    // Ensure participants array exists and check if user has joined
+    const participants = activity.participants || [];
+    const hasJoined = participants.some(p => {
+      if (!p.userId) return false;
+      // Handle both ObjectId and string comparisons
+      const participantUserId = p.userId.toString ? p.userId.toString() : String(p.userId);
+      return participantUserId === String(userId);
+    });
+    
+    const proofOfWork = await ProofOfWork.findOne({ userId, activityId: params.id });
+
+    // Check if user just joined or submitted proof (from redirect)
+    const url = new URL(request.url);
+    const justJoined = url.searchParams.get("joined") === "true";
+    const proofSubmitted = url.searchParams.get("proofSubmitted") === "true";
+
+    console.log(`Activity ${params.id} - User ${userId} - HasJoined: ${hasJoined}, Participants: ${participants.length}`);
+
+    return json({ user, activity, hasJoined, proofOfWork, justJoined, proofSubmitted });
+  } catch (error) {
+    console.error("Error in activity detail loader:", error);
+    throw error;
   }
-
-  const user = await User.findById(userId);
-  const activity = await Activity.findById(params.id);
-  
-  if (!activity) {
-    throw new Response("Activity not found", { status: 404 });
-  }
-
-  const hasJoined = activity.participants?.some(p => p.userId.toString() === userId);
-  const proofOfWork = await ProofOfWork.findOne({ userId, activityId: params.id });
-
-  // Check if user just joined or submitted proof (from redirect)
-  const url = new URL(request.url);
-  const justJoined = url.searchParams.get("joined") === "true";
-  const proofSubmitted = url.searchParams.get("proofSubmitted") === "true";
-
-  return json({ user, activity, hasJoined, proofOfWork, justJoined, proofSubmitted });
 };
 
 export const action = async ({ params, request }) => {
@@ -69,28 +90,41 @@ export const action = async ({ params, request }) => {
         return json({ error: "Activity not found" }, { status: 404 });
       }
 
-      const hasJoined = activity.participants?.some(p => p.userId.toString() === userId);
+      // Check if user has already joined - more robust check
+      const participants = activity.participants || [];
+      const hasJoined = participants.some(p => {
+        if (!p.userId) return false;
+        const participantUserId = p.userId.toString ? p.userId.toString() : String(p.userId);
+        return participantUserId === String(userId);
+      });
       
       if (hasJoined) {
         return json({ error: "You have already joined this activity" }, { status: 400 });
       }
 
-      if (activity.participants?.length >= activity.maxParticipants) {
+      if (participants.length >= activity.maxParticipants) {
         return json({ error: "Activity is full" }, { status: 400 });
       }
 
-      // Initialize participants array if it doesn't exist
+      // Ensure participants array exists
       if (!activity.participants) {
         activity.participants = [];
       }
 
+      // Add user to participants
       activity.participants.push({
         userId: new mongoose.Types.ObjectId(userId),
         joinedAt: new Date(),
         isPresent: null,
       });
 
-      await activity.save();
+      // Save and ensure the save was successful
+      const savedActivity = await activity.save();
+      
+      // Verify the save
+      if (!savedActivity) {
+        throw new Error("Failed to save activity");
+      }
       
       console.log(`✅ User ${userId} successfully joined activity ${params.id}`);
       console.log(`Total participants: ${activity.participants.length}`);
@@ -109,7 +143,14 @@ export const action = async ({ params, request }) => {
       const proofUrl = formData.get("proofUrl");
 
       const activity = await Activity.findById(params.id);
-      const hasJoined = activity.participants?.some(p => p.userId.toString() === userId);
+      
+      // Check if user has joined - more robust check
+      const participants = activity.participants || [];
+      const hasJoined = participants.some(p => {
+        if (!p.userId) return false;
+        const participantUserId = p.userId.toString ? p.userId.toString() : String(p.userId);
+        return participantUserId === String(userId);
+      });
 
       if (!hasJoined) {
         return json({ error: "You must join the activity first" }, { status: 400 });
@@ -122,15 +163,17 @@ export const action = async ({ params, request }) => {
         return json({ error: "You have already submitted proof for this activity" }, { status: 400 });
       }
 
-      await ProofOfWork.create({
-        userId,
-        activityId: params.id,
+      // Ensure userId and activityId are ObjectIds
+      const proof = await ProofOfWork.create({
+        userId: new mongoose.Types.ObjectId(userId),
+        activityId: new mongoose.Types.ObjectId(params.id),
         description,
-        proofUrl,
+        proofUrl: proofUrl || undefined,
         verified: false,
       });
 
       console.log(`✅ User ${userId} submitted proof for activity ${params.id}`);
+      console.log(`Proof ID: ${proof._id}`);
 
       // Redirect to reload data and show updated state
       return redirect(`/activities/${params.id}?proofSubmitted=true`);

@@ -20,21 +20,42 @@ const sessionStorage = createCookieSessionStorage({
 });
 
 export const loader = async ({ request }) => {
-  await connectDb();
-  
-  const session = await sessionStorage.getSession(request.headers.get("Cookie"));
-  const userId = session.get("userId");
+  try {
+    await connectDb();
+    
+    const session = await sessionStorage.getSession(request.headers.get("Cookie"));
+    const userId = session.get("userId");
 
-  if (!userId) {
-    return redirect("/login");
+    if (!userId) {
+      return redirect("/login");
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      console.error(`User not found: ${userId}`);
+      return redirect("/login");
+    }
+    
+    // Find all proof of works for this user
+    const proofOfWorks = await ProofOfWork.find({ userId })
+      .populate({
+        path: "activityId",
+        model: "Activity",
+        // Handle cases where activity might be deleted
+        options: { strictPopulate: false }
+      })
+      .sort({ createdAt: -1 });
+
+    // Filter out any proof of works where activity was deleted
+    const validProofOfWorks = proofOfWorks.filter(pow => pow.activityId !== null);
+
+    console.log(`Found ${validProofOfWorks.length} proof of works for user ${userId}`);
+
+    return json({ user, proofOfWorks: validProofOfWorks });
+  } catch (error) {
+    console.error("Error in proof-of-work loader:", error);
+    throw error;
   }
-
-  const user = await User.findById(userId);
-  const proofOfWorks = await ProofOfWork.find({ userId })
-    .populate("activityId")
-    .sort({ createdAt: -1 });
-
-  return json({ user, proofOfWorks });
 };
 
 export default function ProofOfWorkPage() {
@@ -75,9 +96,11 @@ export default function ProofOfWorkPage() {
                   </div>
                   
                   <h2 className="text-xl font-bold text-gray-900 mb-2">
-                    {pow.activityId?.title || "Activity"}
+                    {pow.activityId?.title || "Activity (Deleted)"}
                   </h2>
-                  <p className="text-gray-600 text-sm mb-4 line-clamp-3">{pow.description}</p>
+                  <p className="text-gray-600 text-sm mb-4 line-clamp-3">
+                    {pow.description || "No description provided"}
+                  </p>
                   
                   {pow.proofUrl && (
                     <div className="mb-4">
