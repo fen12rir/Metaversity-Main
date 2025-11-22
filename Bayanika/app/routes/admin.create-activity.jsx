@@ -1,5 +1,5 @@
 import { json, redirect } from "@remix-run/node";
-import { Form, useActionData, useNavigation } from "@remix-run/react";
+import { Form, useActionData, useNavigation, useLoaderData, Link } from "@remix-run/react";
 import { createCookieSessionStorage } from "@remix-run/node";
 import User from "../models/userModel.js";
 import Activity from "../models/activityModel.js";

@@ -188,7 +188,11 @@ export default function Activities() {
               <div className="flex space-x-4">
                 <Link
                   to={`/activities/${String(selectedActivity._id)}`}
-                  className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 rounded-xl font-bold text-center hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl transition-all duration-200"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedActivity(null);
+                  }}
+                  className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 rounded-xl font-bold text-center hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl transition-all duration-200 block"
                 >
                   ✅ Join This Activity
                 </Link>

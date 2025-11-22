@@ -38,11 +38,19 @@ export default function Profile() {
   const { user, proofOfWorks } = useLoaderData();
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
       <Navigation user={user} />
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Profile</h1>
+        <div className="bg-white rounded-2xl shadow-xl p-8">
+          <div className="flex items-center mb-8">
+            <div className="h-24 w-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white text-4xl font-bold mr-6">
+              {user.firstName[0]}{user.lastName[0]}
+            </div>
+            <div>
+              <h1 className="text-4xl font-bold text-gray-900 mb-2">{user.firstName} {user.lastName}</h1>
+              <p className="text-gray-600 text-lg">Level {user.level || 1} Bayani</p>
+            </div>
+          </div>
           
           <div className="grid md:grid-cols-2 gap-6 mb-6">
             <div>
