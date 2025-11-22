@@ -35,7 +35,7 @@ export default function Navigation({ user }) {
               to="/proof-of-work" 
               className="text-gray-700 hover:text-indigo-600 font-medium transition-colors"
             >
-              Proof of Work
+              📝 My Proof
             </Link>
             <Link 
               to="/leaderboard" 

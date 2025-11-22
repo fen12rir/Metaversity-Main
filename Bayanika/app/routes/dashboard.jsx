@@ -109,10 +109,10 @@ export default function Dashboard() {
                       {activity.participants?.length || 0} / {activity.maxParticipants} joined
                     </div>
                     <Link
-                      to={`/activities/${activity._id}`}
+                      to={`/activities/${String(activity._id)}`}
                       className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 shadow-md hover:shadow-lg transition-all duration-200"
                     >
-                      Join Now
+                      View Details
                     </Link>
                   </div>
                 </div>

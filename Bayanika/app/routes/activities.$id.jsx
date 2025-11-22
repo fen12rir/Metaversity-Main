@@ -235,20 +235,25 @@ export default function ActivityDetail() {
           {/* Actions */}
           <div className="px-8 py-6">
             {!hasJoined ? (
-              <Form method="post">
-                <input type="hidden" name="actionType" value="join" />
-                <button
-                  type="submit"
-                  disabled={isFull || isSubmitting}
-                  className={`w-full py-4 rounded-xl font-bold text-lg transition-all duration-200 ${
-                    isFull
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 shadow-lg hover:shadow-xl'
-                  }`}
-                >
-                  {isFull ? '❌ Activity is Full' : isSubmitting ? 'Joining...' : '✅ Join This Activity'}
-                </button>
-              </Form>
+              <div>
+                <div className="bg-blue-50 border border-blue-200 text-blue-700 px-6 py-4 rounded-lg mb-4">
+                  ℹ️ Click the button below to join this activity and start earning Bayanihan Points!
+                </div>
+                <Form method="post">
+                  <input type="hidden" name="actionType" value="join" />
+                  <button
+                    type="submit"
+                    disabled={isFull || isSubmitting}
+                    className={`w-full py-4 rounded-xl font-bold text-lg transition-all duration-200 ${
+                      isFull
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl'
+                    }`}
+                  >
+                    {isFull ? '❌ Activity is Full' : isSubmitting ? 'Joining...' : '✅ Join This Activity'}
+                  </button>
+                </Form>
+              </div>
             ) : !hasSubmittedProof ? (
               <div className="space-y-4">
                 <div className="bg-green-50 border border-green-200 text-green-700 px-6 py-4 rounded-lg">
